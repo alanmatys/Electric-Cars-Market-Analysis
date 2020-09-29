@@ -1,0 +1,245 @@
+library(data.table)
+library(tidyverse)
+library(dplyr)
+library(janitor)
+library(ggplot2)
+library(gridExtra)
+
+rm(list=ls())
+
+## Seteo WD
+setwd("D:/MiM Ingreso/Modulo 3/Ventas y Marketing")
+
+
+encuesta <- read.csv(file = "Formulario sin título.csv",header = TRUE)
+View(encuesta)
+encuesta <- encuesta %>% select(!"Marca.temporal")
+
+
+encuestafinal <- encuesta %>% select(!c("Genero","Rango.Edad"))
+df <-data.frame(newcol = c(encuestafinal$Modelo.1,encuestafinal$Modelo.2,encuestafinal$Modelo.3,encuestafinal$Modelo.4,encuestafinal$Modelo.5,encuestafinal$Modelo.6,encuestafinal$Modelo.7,encuestafinal$Modelo.8,encuestafinal$Modelo.9,encuestafinal$Modelo.10,encuestafinal$Modelo.11,encuestafinal$Modelo.12,encuestafinal$Modelo.13,encuestafinal$Modelo.14), stringsAsFactors=FALSE)
+df1 <- data.frame(newcol = rep(c(encuesta$Genero),14),stringsAsFactors = TRUE)
+df2 <- data.frame(newcol = rep(c(encuesta$Rango.Edad),14),stringsAsFactors = TRUE)
+df3 <- data.frame(newcol = rep(1:14,each=25),stringsAsFactors = TRUE)
+encuestafin <- cbind(df,df1,df2,df3)
+colnames(encuestafin) <- c("Rating","Genero","Edad","Modelo")
+encuestafin$Genero <- factor(encuestafin$Genero,levels = c(1,2),labels = c("Femenino","Masculino"))
+encuestafin$Edad <- factor(encuestafin$Edad,levels = c(1,2,3),labels = c("+35","18-25","26-35"))
+encuestafin$Genero <- factor(encuestafin$Genero,levels = c(1,2),labels = c("Femenino","Masculino"))
+rm(list="df1","df2","df3","df","enc","encuestafinal","encuesta")
+encuestafin$Charge6hs <- as.integer(rep(c(1,0,0,0,1,0,1,1,0,0,1,0,1,0),each=25))
+encuestafin$Charge30min <- as.integer(rep(c(0,1,0,1,0,1,0,0,1,0,0,0,0,1),each=25))
+encuestafin$Charge30hs <- as.integer(rep(c(0,0,1,0,0,0,0,0,0,1,0,1,0,0),each=25))
+encuestafin$TopSpeed217km <- as.integer(rep(c(1,0,0,0,0,1,0,0,0,1,0,0,1,0),each=25))
+encuestafin$TopSpeed190km <- as.integer(rep(c(0,1,0,1,0,0,0,1,0,0,1,1,0,0),each=25))
+encuestafin$TopSpeed120km <- as.integer(rep(c(0,0,1,0,1,0,1,0,1,0,0,0,0,1),each=25))
+encuestafin$MarcaJaguar <- as.integer(rep(c(0,1,1,0,0,0,0,1,1,0,0,0,1,0),each=25))
+encuestafin$MarcaTesla <- as.integer(rep(c(1,0,0,0,0,1,1,0,0,0,0,1,0,0),each=25))
+encuestafin$MarcaVolkswagen <- as.integer(rep(c(0,0,0,1,1,0,0,0,0,1,1,0,0,1),each=25))
+encuestafin$PrecioAlto <- as.integer(rep(c(0,0,0,0,0,1,1,1,1,1,1,0,0,0),each=25))
+encuestafin$PrecioMedio <- as.integer(rep(c(1,1,1,1,1,0,0,0,0,0,0,0,0,0),each=25))
+encuestafin$PrecioBajo <- as.integer(rep(c(0,0,0,0,0,0,0,0,0,0,0,1,1,1),each=25))
+encuestafin$usuario <- as.integer(rep(c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25),times=14))
+
+################################# PUNTO 1 y 2 ##############################################
+# Corro regresion, Categorias Base = Carge30hs/MarcaTesla/Topspeed120kmh/PrecioAlto
+# Coeficientes de regresion general
+linear_modelgral <- lm(Rating ~ Charge30min + Charge6hs + MarcaVolkswagen + MarcaJaguar + TopSpeed190km + TopSpeed217km +PrecioBajo+PrecioMedio,data=encuestafin) 
+lm_summarygral <- summary(linear_modelgral)
+coeffsgral <- as.vector(lm_summarygral$coefficients[,1])
+names(coeffsgral) <- names(linear_modelgral$coefficients)
+coeffsgral
+# RAjustado bajo 0.1614 / F mucho mayor a 0.01 / solo covariables Charge30min/6hs, TopSpeed217kmh y PrecioBajo son estadisticamente significativas respecto a la categoria base (Pvalue menor al 0.05)
+
+# Tomo coeficientes estimados por la regresion para el ultimo
+coeffgral <- as.vector(lm_summarygral$coefficients[,1])
+# Seteo los atributos junto al intercepto
+pw_ut <- c(coeffgral[1], coeffgral[2:3], 0, coeffgral[4:5], 0, coeffgral[6:7], 0, coeffgral[8:9], 0)
+#Defino los niveles
+levels <- c("Intercept","Charge30min","Charge6hs","Charge30hs","MarcaVolkswagen","MarcaJaguar","MarcaTesla","TopSpeed190kmh","TopSpeed217kmh","TopSpeed120kmh","PrecioBajo","PrecioMedio","PrecioAlto")
+#Defino las variables
+attributes <- c("Intercept",rep(c("Charge"),times=3),rep(c("Marca"),times=3),rep(c("TopSpeed"),times=3),rep(c("Precio"),times=3))
+#Obtengo Data frame de las utilidades relativas
+pw_ut_df <- data.frame(Variable = attributes,Levels= levels,pw_ut)
+
+#Separo las variables por sus niveles
+cellPrecio <- subset(pw_ut_df,pw_ut_df$Variable == "Precio")
+cellCharge <- subset(pw_ut_df,pw_ut_df$Variable == "Charge")
+cellMarca <- subset(pw_ut_df,pw_ut_df$Variable == "Marca")
+cellTopspeed <- subset(pw_ut_df,pw_ut_df$Variable == "TopSpeed")
+
+#Calculo los rangos de las variables tomando la diferencia de los valores extremos
+cellPrecio_Range <- max(cellPrecio$pw_ut) - min(cellPrecio$pw_ut)
+cellCharge_Range <- max(cellCharge$pw_ut) - min(cellCharge$pw_ut)
+cellMarca_Range <- max(cellMarca$pw_ut) - min(cellMarca$pw_ut)
+cellTopspeed_Range <- max(cellTopspeed$pw_ut) - min(cellTopspeed$pw_ut)
+total_range <- sum(cellCharge_Range + cellTopspeed_Range + cellMarca_Range + cellPrecio_Range)
+
+#Calculamos la importancia relativa de cada variable
+cellPrecio_importance <- cellPrecio_Range/total_range
+cellCharge_importance <- cellCharge_Range/total_range
+cellMarca_importance <- cellMarca_Range/total_range
+cellTopspeed_importance <- cellTopspeed_Range/total_range
+relative_importancegral <- data.frame(Attribute = c("Precio","Charge","Marca","Topspeed"),
+                                  Importance = c(cellPrecio_importance,cellCharge_importance,cellMarca_importance,cellTopspeed_importance))
+relative_importancegral
+ggplot(relative_importancegral,aes(Attribute,Importance))+geom_bar(stat = "identity")+ggtitle("Importancia Relativa General")
+
+
+##################################### PARA CADA USUARIO #############################################
+# Coeficientes para cada uno de los usuarios
+coeffs <- data.frame()
+for(i in c(1:25)){
+  data <- encuestafin %>% filter(usuario == i)
+  linear_model <- lm(Rating ~ Charge30min + Charge6hs + MarcaVolkswagen + MarcaJaguar + TopSpeed190km + TopSpeed217km +PrecioBajo+PrecioMedio,data=data)
+  lm_summary <- summary(linear_model)
+  coeffs <- rbind(coeffs,as.vector(lm_summary$coefficients[,1]))
+  
+  pw_ut <- c(coeffs[1], coeffs[2:3], 0, coeffs[4:5], 0, coeffs[6:7], 0, coeffs[8:9], 0)
+}
+coefnames <- names(linear_model$coefficients)
+names(coeffs) <- coefnames
+coeffs
+lm_summary
+
+# Tomo coeficientes estimados por la regresion para el ultimo
+coeffulti <- as.vector(lm_summary$coefficients[,1])
+# Seteo los atributos junto al intercepto
+pw_ut <- c(coeffulti[1], coeffulti[2:3], 0, coeffulti[4:5], 0, coeffulti[6:7], 0, coeffulti[8:9], 0)
+#Defino los niveles
+levels <- c("Intercept","Charge30min","Charge6hs","Charge30hs","MarcaVolkswagen","MarcaJaguar","MarcaTesla","TopSpeed190kmh","TopSpeed217kmh","TopSpeed120kmh","PrecioBajo","PrecioMedio","PrecioAlto")
+#Defino las variables
+attributes <- c("Intercept",rep(c("Charge"),times=3),rep(c("Marca"),times=3),rep(c("TopSpeed"),times=3),rep(c("Precio"),times=3))
+#Obtengo Data frame de las utilidades relativas
+pw_ut_df <- data.frame(Variable = attributes,Levels= levels,pw_ut)
+
+#Separo las variables por sus niveles
+cellPrecio <- subset(pw_ut_df,pw_ut_df$Variable == "Precio")
+cellCharge <- subset(pw_ut_df,pw_ut_df$Variable == "Charge")
+cellMarca <- subset(pw_ut_df,pw_ut_df$Variable == "Marca")
+cellTopspeed <- subset(pw_ut_df,pw_ut_df$Variable == "TopSpeed")
+
+#Calculo los rangos de las variables tomando la diferencia de los valores extremos
+cellPrecio_Range <- max(cellPrecio$pw_ut) - min(cellPrecio$pw_ut)
+cellCharge_Range <- max(cellCharge$pw_ut) - min(cellCharge$pw_ut)
+cellMarca_Range <- max(cellMarca$pw_ut) - min(cellMarca$pw_ut)
+cellTopspeed_Range <- max(cellTopspeed$pw_ut) - min(cellTopspeed$pw_ut)
+total_range <- sum(cellCharge_Range + cellTopspeed_Range + cellMarca_Range + cellPrecio_Range)
+
+#Calculamos la importancia relativa de cada variable
+cellPrecio_importance <- cellPrecio_Range/total_range
+cellCharge_importance <- cellCharge_Range/total_range
+cellMarca_importance <- cellMarca_Range/total_range
+cellTopspeed_importance <- cellTopspeed_Range/total_range
+relative_importance <- data.frame(Attribute = c("Precio","Charge","Marca","Topspeed"),
+                                  Importance = c(cellPrecio_importance,cellCharge_importance,cellMarca_importance,cellTopspeed_importance))
+relative_importance
+relative_importancegral
+ggplot(relative_importance,aes(Attribute,Importance))+geom_bar(stat = "identity")+ggtitle("Importancia Relativa Ultimo Usuario")
+ggplot(relative_importancegral,aes(Attribute,Importance))+geom_bar(stat = "identity")+ggtitle("Importancia Relativa General")
+
+#################################################################################
+# Grafico tabla con las utilidades
+coeffs
+priceutil <- cbind(coeffs[8],coeffs[9],rep(0,times=25))
+names(priceutil) <- c("P.Bajo","P.Medio","P.Alto")
+
+my_df <- priceutil %>% 
+  rownames_to_column('usuario') %>% 
+  gather(key = 'key',value =  'value',- usuario)
+my_df
+
+summarized_df <-my_df %>%
+  select(-usuario) %>% 
+  group_by(key) %>% 
+  summarise_all(mean)
+
+ggplot(my_df)+
+  geom_line(aes(x = key, y = value, group = usuario))+geom_line(data =summarized_df, aes(x = key, y = value, group = 1), color = 'red', size = 2)+geom_point(aes(x = key, y = value, group = usuario))+xlab("Precios")+ylab("Utilidad Parciales")+ggtitle("Valores Parciales de Precio")
+
+#################################################################################
+#Saco Voluntad de Pago de 30hs a 30min de carga
+# CORRER ANTES CODIGO DE REGRESION GENERAL LINEA 45 a 84
+lowPrice <- 38895
+mediumPrice <- 52990
+highPrice <- 69500
+#El de Mayor importancia relativa es Charge / Utilidad de cambiar tiempo de carga 30hs a 30min
+charge_ut_range <- cellCharge$pw_ut[cellCharge$Levels == "Charge30min"] - cellCharge$pw_ut[cellCharge$Levels == "Charge30hs"]
+#Rango de precios
+price_range <- highPrice-lowPrice
+#Rango de Utilidad Relativa para Precio
+price_ut_range <- cellPrecio$pw_ut[cellPrecio$Levels == "PrecioBajo"] - cellPrecio$pw_ut[cellPrecio$Levels == "PrecioAlto"]
+#El valor monetario de una unidad de precio es
+mv <- price_range/price_ut_range
+
+#Por lo tanto pasar de 30hs a 30min de carga, da una Voluntad de pago de 76652.46 dolares
+mv*charge_ut_range
+mv*charge_ut_range-price_range
+
+#################################################################################
+#Segmentar por resultados de importanca relativa / Calculo y Ploteo todas las importancias relativas y las voy guardando en una lista
+gg <-list()
+gg<- NULL
+for(i in c(1:25)){
+  data <- encuestafin %>% filter(usuario == i)
+  linear_model <- lm(Rating ~ Charge30min + Charge6hs + MarcaVolkswagen + MarcaJaguar + TopSpeed190km + TopSpeed217km +PrecioBajo+PrecioMedio,data=data)
+  lm_summary <- summary(linear_model)
+  coeffs <- as.vector(lm_summary$coefficients[,1])
+  
+  pw_ut_i <- c(coeffs[1], coeffs[2:3], 0, coeffs[4:5], 0, coeffs[6:7], 0, coeffs[8:9], 0)
+  levels <-c("Intercept","Charge30min","Charge6hs","Charge30hs","MarcaVolkswagen","MarcaJaguar","MarcaTesla","TopSpeed190kmh","TopSpeed217kmh","TopSpeed120kmh","PrecioBajo","PrecioMedio","PrecioAlto")
+  attributes <- c("Intercept",rep(c("Charge"),times=3),rep(c("Marca"),times=3),rep(c("TopSpeed"),times=3),rep(c("Precio"),times=3))
+  pw_ut_df_i <- data.frame(Variable = attributes,Levels= levels,pw_ut_i)
+  
+  #Separo las variables por sus niveles
+  cellPrecio <- subset(pw_ut_df_i,pw_ut_df_i$Variable == "Precio")
+  cellCharge <- subset(pw_ut_df_i,pw_ut_df_i$Variable == "Charge")
+  cellMarca <- subset(pw_ut_df_i,pw_ut_df_i$Variable == "Marca")
+  cellTopspeed <- subset(pw_ut_df_i,pw_ut_df_i$Variable == "TopSpeed")
+  
+  #Calculo los rangos de las variables tomando la diferencia de los valores extremos
+  cellPrecio_Range <- max(cellPrecio$pw_ut_i) - min(cellPrecio$pw_ut_i)
+  cellCharge_Range <- max(cellCharge$pw_ut_i) - min(cellCharge$pw_ut_i)
+  cellMarca_Range <- max(cellMarca$pw_ut_i) - min(cellMarca$pw_ut_i)
+  cellTopspeed_Range <- max(cellTopspeed$pw_ut_i) - min(cellTopspeed$pw_ut_i)
+  total_range <- sum(cellCharge_Range + cellTopspeed_Range + cellMarca_Range + cellPrecio_Range)
+  
+  #Calculamos la importancia relativa de cada variable
+  cellPrecio_importance <- cellPrecio_Range/total_range
+  cellCharge_importance <- cellCharge_Range/total_range
+  cellMarca_importance <- cellMarca_Range/total_range
+  cellTopspeed_importance <- cellTopspeed_Range/total_range
+  relative_importance <- data.frame(Attribute = c("Precio","Charge","Marca","Topspeed"),
+                                    Importance = c(cellPrecio_importance,cellCharge_importance,cellMarca_importance,cellTopspeed_importance))
+  gg[[i]] <- ggplot(relative_importance,aes(Attribute,Importance))+geom_bar(stat = "identity")+ggtitle("Imp x Usuario")
+  }
+
+do.call("grid.arrange", c(gg, ncol=5))
+#################################################################################
+#Corro modelos lineales para cada usuario y sobre esos le calculo la utilidad para cada modelo.
+
+coeffs <- data.frame()
+decision <- data.frame()
+meanutil <-data.frame()
+
+for(i in c(1:25)){
+  data <- encuestafin %>% filter(usuario == i)
+  linear_model <- lm(Rating ~ Charge30min + Charge6hs + MarcaVolkswagen + MarcaJaguar + TopSpeed190km + TopSpeed217km +PrecioBajo+PrecioMedio,data=data)
+  lm_summary <- summary(linear_model)
+  coeffs <- as.vector(lm_summary$coefficients[,1])
+  
+  pw_ut_i <- c(coeffs[1], coeffs[2:3], 0, coeffs[4:5], 0, coeffs[6:7], 0, coeffs[8:9], 0)
+  levels <-c("Intercept","Charge30min","Charge6hs","Charge30hs","MarcaVolkswagen","MarcaJaguar","MarcaTesla","TopSpeed190kmh","TopSpeed217kmh","TopSpeed120kmh","PrecioBajo","PrecioMedio","PrecioAlto")
+  attributes <- c("Intercept",rep(c("Charge"),times=3),rep(c("Marca"),times=3),rep(c("TopSpeed"),times=3),rep(c("Precio"),times=3))
+  pw_ut_df_i <- data.frame(Variable = attributes,Levels= levels,pw_ut_i)
+  
+  
+  utility_a <- sum(pw_ut_df_i$pw_ut_i[pw_ut_df_i$Levels == "Intercept"]+pw_ut_df_i$pw_ut_i[pw_ut_df_i$Levels == "Charge30hs"]+pw_ut_df_i$pw_ut_i[pw_ut_df_i$Levels == "MarcaTesla"]+pw_ut_df_i$pw_ut_i[pw_ut_df_i$Levels == "TopSpeed190kmh"]+pw_ut_df_i$pw_ut_i[pw_ut_df_i$Levels == "PrecioMedio"])
+  utility_b <- sum(pw_ut_df_i$pw_ut_i[pw_ut_df_i$Levels == "Intercept"]+pw_ut_df_i$pw_ut_i[pw_ut_df_i$Levels == "Charge30min"]+pw_ut_df_i$pw_ut_i[pw_ut_df_i$Levels == "MarcaJaguar"]+pw_ut_df_i$pw_ut_i[pw_ut_df_i$Levels == "TopSpeed217kmh"]+pw_ut_df_i$pw_ut_i[pw_ut_df_i$Levels == "PrecioAlto"])
+  
+  decision <-rbind(decision,ifelse(utility_a > utility_b,1,0))
+  meanutil <-rbind(meanutil,data.frame(utility_a,utility_b))
+  }
+prop.table(table(decision))
+mean(meanutil$utility_a)
+mean(meanutil$utility_b)
